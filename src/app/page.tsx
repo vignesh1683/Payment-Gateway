@@ -3,9 +3,13 @@
 import React, { useState } from 'react';
 import PaymentForm from '@/components/PaymentForm';
 import CardPreview from '@/components/CardPreview';
+import StatusScreen from '@/components/StatusScreen';
+import { usePaymentStore } from '@/store/usePaymentStore';
 import { CardType } from '@/types/payment';
 
 export default function Home() {
+  const { status, setStatus, history, currentTransactionId, attemptCount, resetAttemptCount, setCurrentTransactionId } = usePaymentStore();
+
   const [previewData, setPreviewData] = useState({
     cardNumber: '',
     cardholderName: '',
@@ -22,8 +26,20 @@ export default function Home() {
     });
   };
 
+  const currentTransaction = history.find(t => t.id === currentTransactionId) || null;
+
+  const handleRetry = () => {
+    setStatus('IDLE');
+  };
+
+  const handleReset = () => {
+    setStatus('IDLE');
+    resetAttemptCount();
+    setCurrentTransactionId(null);
+  };
+
   return (
-    <main className="min-h-screen flex flex-col items-center py-12 px-4 md:px-8">
+    <main className="min-h-screen flex flex-col items-center py-12 px-4 md:px-8 bg-slate-950 text-slate-50">
       {/* Header */}
       <div className="text-center mb-12">
         <h1 className="text-4xl md:text-5xl font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 mb-4">
@@ -35,9 +51,19 @@ export default function Home() {
       </div>
 
       <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
-        {/* Left: Form */}
-        <div className="flex justify-center lg:justify-end order-2 lg:order-1">
-          <PaymentForm onFormUpdate={handleFormUpdate} />
+        {/* Left: Form / Status */}
+        <div className="flex justify-center lg:justify-end order-2 lg:order-1 min-h-[500px]">
+          {(status === 'IDLE' || status === 'PROCESSING') ? (
+            <PaymentForm onFormUpdate={handleFormUpdate} />
+          ) : (
+            <StatusScreen
+              status={status}
+              transaction={currentTransaction}
+              onRetry={handleRetry}
+              onReset={handleReset}
+              attemptCount={attemptCount}
+            />
+          )}
         </div>
 
         {/* Right: Preview & Stats */}
@@ -52,18 +78,24 @@ export default function Home() {
             <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
               <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-800">
                 <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Status</p>
-                <p className="text-emerald-400 font-mono text-xs">Ready for Transaction</p>
+                <p className={`font-mono text-xs ${status === 'SUCCESS' ? 'text-emerald-400' :
+                  status === 'FAILED' ? 'text-red-400' :
+                    status === 'TIMEOUT' ? 'text-amber-400' :
+                      status === 'PROCESSING' ? 'text-indigo-400 animate-pulse' : 'text-slate-400'
+                  }`}>
+                  {status === 'IDLE' ? 'Ready' : status.charAt(0) + status.slice(1).toLowerCase()}
+                </p>
               </div>
               <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-800">
                 <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Attempt</p>
-                <p className="text-indigo-400 font-mono text-xs">1 of 3 Available</p>
+                <p className="text-indigo-400 font-mono text-xs">{attemptCount} of 3 Used</p>
               </div>
             </div>
 
             {/* Quick Tips */}
             <div className="max-w-sm bg-indigo-500/5 p-4 rounded-xl border border-indigo-500/20">
               <p className="text-xs text-indigo-300 leading-relaxed">
-                <span className="font-bold">Tip:</span> Try different card numbers to see real-time card type detection (4 for Visa, 5 for Mastercard, 34/37 for Amex).
+                <span className="font-bold">Tip:</span> The gateway has a 15% chance of timing out. We'll automatically abort the request after 6 seconds.
               </p>
             </div>
           </div>

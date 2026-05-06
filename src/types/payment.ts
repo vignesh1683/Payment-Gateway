@@ -1,16 +1,33 @@
+export type PaymentStatus = 'IDLE' | 'PROCESSING' | 'SUCCESS' | 'FAILED' | 'TIMEOUT';
+
 export type CardType = 'VISA' | 'MASTERCARD' | 'AMEX' | 'UNKNOWN';
 
 export type Currency = 'INR' | 'USD';
 
-export type PaymentStatus = 'IDLE' | 'PROCESSING' | 'SUCCESS' | 'FAILED';
+export interface PaymentPayload {
+  cardholderName: string;
+  cardNumber: string;
+  expiryDate: string;
+  cvv: string;
+  amount: number;
+  currency: Currency;
+  transactionId: string;
+}
 
 export interface Transaction {
   id: string;
-  cardholderName: string;
-  cardNumber: string; // Masked version
-  cardType: CardType;
-  amount: string;
+  amount: number;
   currency: Currency;
-  status: PaymentStatus;
+  status: 'SUCCESS' | 'FAILED' | 'TIMEOUT';
   timestamp: number;
+  cardLast4: string;
+  cardType: CardType;
+  failureReason?: string;
+  attemptCount: number;
+}
+
+export interface ApiResponse {
+  status: 'SUCCESS' | 'FAILED';
+  reason?: string;
+  transactionId: string;
 }

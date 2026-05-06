@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { usePaymentStore } from '@/store/usePaymentStore';
 import {
   validateCardNumber,
@@ -10,7 +10,7 @@ import {
   validateAmount
 } from '@/utils/validation';
 import { formatCardNumber, formatExpiryDate } from '@/utils/formatting';
-import { Currency, CardType } from '@/types/payment';
+import { Currency, CardType, Transaction } from '@/types/payment';
 import Badge from './Badge';
 import { Loader2, ShieldCheck } from 'lucide-react';
 
@@ -27,7 +27,15 @@ interface PaymentFormProps {
 }
 
 const PaymentForm: React.FC<PaymentFormProps> = ({ onFormUpdate }) => {
-  const { status, setStatus, incrementAttemptCount, setCurrentTransactionId, addTransaction } = usePaymentStore();
+  const {
+    status,
+    setStatus,
+    incrementAttemptCount,
+    setCurrentTransactionId,
+    currentTransactionId,
+    addTransaction,
+    attemptCount
+  } = usePaymentStore();
 
   const [formData, setFormData] = useState({
     cardholderName: '',
@@ -41,6 +49,8 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ onFormUpdate }) => {
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [cardType, setCardType] = useState<CardType>('UNKNOWN');
+
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     onFormUpdate({ ...formData, cardType });
@@ -81,7 +91,6 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ onFormUpdate }) => {
 
     setFormData(prev => ({ ...prev, [name]: formattedValue }));
 
-    // Real-time validation
     const error = validateField(name, formattedValue);
     setErrors(prev => ({ ...prev, [name]: error }));
   };
@@ -101,19 +110,86 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ onFormUpdate }) => {
     formData.amount &&
     Object.values(errors).every(err => !err);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isFormValid) return;
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!isFormValid || status === 'PROCESSING') return;
 
+    // Set initial state for the transaction
     setStatus('PROCESSING');
-    const transactionId = crypto.randomUUID();
-    setCurrentTransactionId(transactionId);
+
+    // Use existing transaction ID if it's a retry, otherwise generate new
+    const transactionId = currentTransactionId || crypto.randomUUID();
+    if (!currentTransactionId) {
+      setCurrentTransactionId(transactionId);
+    }
+
     incrementAttemptCount();
 
+    // Setup AbortController for 6s timeout
+    abortControllerRef.current = new AbortController();
+    const timeoutId = setTimeout(() => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    }, 6000);
+
+    try {
+      const response = await fetch('/api/pay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          amount: Number(formData.amount),
+          transactionId
+        }),
+        signal: abortControllerRef.current.signal
+      });
+
+      clearTimeout(timeoutId);
+      const data = await response.json();
+
+      const transaction: Transaction = {
+        id: transactionId,
+        amount: Number(formData.amount),
+        currency: formData.currency,
+        status: data.status === 'SUCCESS' ? 'SUCCESS' : 'FAILED',
+        timestamp: Date.now(),
+        cardLast4: formData.cardNumber.slice(-4),
+        cardType: cardType,
+        failureReason: data.reason,
+        attemptCount: attemptCount + 1
+      };
+
+      addTransaction(transaction);
+      setStatus(transaction.status);
+
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+
+      const isTimeout = error.name === 'AbortError';
+      const status: 'TIMEOUT' | 'FAILED' = isTimeout ? 'TIMEOUT' : 'FAILED';
+
+      const transaction: Transaction = {
+        id: transactionId,
+        amount: Number(formData.amount),
+        currency: formData.currency,
+        status: status,
+        timestamp: Date.now(),
+        cardLast4: formData.cardNumber.slice(-4),
+        cardType: cardType,
+        failureReason: isTimeout ? 'Gateway timeout' : 'Network error',
+        attemptCount: attemptCount + 1
+      };
+
+      addTransaction(transaction);
+      setStatus(status);
+    }
   };
 
+  if (status !== 'IDLE' && status !== 'PROCESSING') return null;
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 w-full max-w-md bg-slate-900/50 p-8 rounded-2xl border border-slate-800 backdrop-blur-sm">
+    <form onSubmit={handleSubmit} className="space-y-6 w-full max-w-md bg-slate-900/50 p-8 rounded-2xl border border-slate-800 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex items-center gap-2 mb-2">
         <ShieldCheck className="w-5 h-5 text-indigo-400" />
         <h2 className="text-xl font-bold">Payment Details</h2>
@@ -130,7 +206,8 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ onFormUpdate }) => {
             onChange={handleChange}
             onBlur={handleBlur}
             placeholder="John Doe"
-            className={`w-full bg-slate-800 border ${touched.cardholderName && errors.cardholderName ? 'border-red-500' : 'border-slate-700'} rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all`}
+            disabled={status === 'PROCESSING'}
+            className={`w-full bg-slate-800 border ${touched.cardholderName && errors.cardholderName ? 'border-red-500' : 'border-slate-700'} rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all disabled:opacity-50`}
           />
           {touched.cardholderName && errors.cardholderName && <p className="text-red-500 text-[10px] mt-1">{errors.cardholderName}</p>}
         </div>
@@ -148,7 +225,8 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ onFormUpdate }) => {
             onChange={handleChange}
             onBlur={handleBlur}
             placeholder="0000 0000 0000 0000"
-            className={`w-full bg-slate-800 border ${touched.cardNumber && errors.cardNumber ? 'border-red-500' : 'border-slate-700'} rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 tracking-widest transition-all`}
+            disabled={status === 'PROCESSING'}
+            className={`w-full bg-slate-800 border ${touched.cardNumber && errors.cardNumber ? 'border-red-500' : 'border-slate-700'} rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 tracking-widest transition-all disabled:opacity-50`}
           />
           {touched.cardNumber && errors.cardNumber && <p className="text-red-500 text-[10px] mt-1">{errors.cardNumber}</p>}
         </div>
@@ -164,7 +242,8 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ onFormUpdate }) => {
               onChange={handleChange}
               onBlur={handleBlur}
               placeholder="MM/YY"
-              className={`w-full bg-slate-800 border ${touched.expiryDate && errors.expiryDate ? 'border-red-500' : 'border-slate-700'} rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all`}
+              disabled={status === 'PROCESSING'}
+              className={`w-full bg-slate-800 border ${touched.expiryDate && errors.expiryDate ? 'border-red-500' : 'border-slate-700'} rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all disabled:opacity-50`}
             />
             {touched.expiryDate && errors.expiryDate && <p className="text-red-500 text-[10px] mt-1">{errors.expiryDate}</p>}
           </div>
@@ -179,7 +258,8 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ onFormUpdate }) => {
               onChange={handleChange}
               onBlur={handleBlur}
               placeholder={cardType === 'AMEX' ? '0000' : '000'}
-              className={`w-full bg-slate-800 border ${touched.cvv && errors.cvv ? 'border-red-500' : 'border-slate-700'} rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all`}
+              disabled={status === 'PROCESSING'}
+              className={`w-full bg-slate-800 border ${touched.cvv && errors.cvv ? 'border-red-500' : 'border-slate-700'} rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all disabled:opacity-50`}
             />
             {touched.cvv && errors.cvv && <p className="text-red-500 text-[10px] mt-1">{errors.cvv}</p>}
           </div>
@@ -196,7 +276,8 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ onFormUpdate }) => {
               onChange={handleChange}
               onBlur={handleBlur}
               placeholder="0.00"
-              className={`w-full bg-slate-800 border ${touched.amount && errors.amount ? 'border-red-500' : 'border-slate-700'} rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all`}
+              disabled={status === 'PROCESSING'}
+              className={`w-full bg-slate-800 border ${touched.amount && errors.amount ? 'border-red-500' : 'border-slate-700'} rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all disabled:opacity-50`}
             />
             {touched.amount && errors.amount && <p className="text-red-500 text-[10px] mt-1">{errors.amount}</p>}
           </div>
@@ -208,7 +289,8 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ onFormUpdate }) => {
               name="currency"
               value={formData.currency}
               onChange={handleChange}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all appearance-none"
+              disabled={status === 'PROCESSING'}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all appearance-none disabled:opacity-50"
             >
               <option value="USD">USD</option>
               <option value="INR">INR</option>
@@ -221,8 +303,8 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ onFormUpdate }) => {
         type="submit"
         disabled={!isFormValid || status === 'PROCESSING'}
         className={`w-full py-4 rounded-xl font-bold text-white transition-all transform active:scale-95 ${!isFormValid || status === 'PROCESSING'
-          ? 'bg-slate-700 cursor-not-allowed opacity-50'
-          : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:shadow-lg hover:shadow-indigo-500/30'
+            ? 'bg-slate-700 cursor-not-allowed opacity-50'
+            : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:shadow-lg hover:shadow-indigo-500/30'
           }`}
       >
         {status === 'PROCESSING' ? (
