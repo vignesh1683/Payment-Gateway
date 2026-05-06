@@ -10,7 +10,8 @@ import {
   Clock, 
   ExternalLink,
   Calendar,
-  CreditCard
+  CreditCard,
+  RotateCcw
 } from 'lucide-react';
 
 const TransactionHistory: React.FC = () => {
@@ -29,12 +30,12 @@ const TransactionHistory: React.FC = () => {
 
   return (
     <div className="w-full max-w-md space-y-4">
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-6">
         <History className="w-5 h-5 text-indigo-400" />
         <h3 className="text-lg font-bold">Transaction History</h3>
       </div>
 
-      <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+      <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
         {history.map((transaction) => {
           const isExpanded = selectedId === transaction.id;
           const isSuccess = transaction.status === 'SUCCESS';
@@ -44,13 +45,15 @@ const TransactionHistory: React.FC = () => {
           return (
             <div 
               key={transaction.id}
-              className={`group bg-slate-900/50 rounded-xl border transition-all duration-300 overflow-hidden ${
-                isExpanded ? 'border-indigo-500/50 ring-1 ring-indigo-500/20' : 'border-slate-800 hover:border-slate-700'
+              className={`group bg-gradient-to-r from-slate-900/60 to-slate-900/30 rounded-xl border transition-all duration-300 overflow-hidden ${
+                isExpanded 
+                  ? 'border-indigo-500/60 ring-1 ring-indigo-500/30 shadow-lg shadow-indigo-500/10' 
+                  : 'border-slate-800 hover:border-slate-700 hover:bg-gradient-to-r hover:from-slate-900/80 hover:to-slate-900/40'
               }`}
             >
               <button
                 onClick={() => setSelectedId(isExpanded ? null : transaction.id)}
-                className="w-full p-4 flex items-center justify-between text-left"
+                className="w-full p-4 flex items-center justify-between text-left hover:opacity-80 transition-opacity"
               >
                 <div className="flex items-center gap-3">
                   <div className={`p-2 rounded-lg ${
@@ -85,36 +88,40 @@ const TransactionHistory: React.FC = () => {
 
               {isExpanded && (
                 <div className="px-4 pb-4 animate-in slide-in-from-top-2 duration-300">
-                  <div className="h-px bg-slate-800 mb-4" />
-                  <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-[10px]">
-                    <div className="space-y-1">
-                      <p className="text-slate-500 uppercase font-bold flex items-center gap-1">
-                        <CreditCard className="w-3 h-3" /> Card Info
+                  <div className="h-px bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 mb-4" />
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div className="space-y-2 p-3 bg-slate-900/40 rounded-lg border border-slate-800/50">
+                      <p className="text-slate-400 uppercase font-bold text-[9px] flex items-center gap-1.5 tracking-wide">
+                        <CreditCard className="w-3.5 h-3.5 text-indigo-400" /> Card
                       </p>
-                      <p className="text-slate-300 font-mono">{transaction.cardType} •••• {transaction.cardLast4}</p>
+                      <p className="text-slate-200 font-mono text-sm">{transaction.cardType} •••• {transaction.cardLast4}</p>
                     </div>
-                    <div className="space-y-1">
-                      <p className="text-slate-500 uppercase font-bold flex items-center gap-1">
-                        <ExternalLink className="w-3 h-3" /> Transaction ID
-                      </p>
-                      <p className="text-slate-300 font-mono break-all">{transaction.id}</p>
+                    <div className="space-y-2 p-3 bg-slate-900/40 rounded-lg border border-slate-800/50">
+                      <p className="text-slate-400 uppercase font-bold text-[9px] tracking-wide">Currency</p>
+                      <p className="text-slate-200 font-semibold text-sm">{transaction.currency}</p>
                     </div>
-                    <div className="space-y-1">
-                      <p className="text-slate-500 uppercase font-bold flex items-center gap-1">
-                        <Calendar className="w-3 h-3" /> Timestamp
+                    <div className="space-y-2 p-3 bg-slate-900/40 rounded-lg border border-slate-800/50">
+                      <p className="text-slate-400 uppercase font-bold text-[9px] flex items-center gap-1.5 tracking-wide">
+                        <Calendar className="w-3.5 h-3.5 text-indigo-400" /> Date
                       </p>
-                      <p className="text-slate-300">{new Date(transaction.timestamp).toISOString()}</p>
+                      <p className="text-slate-200 text-sm">{new Date(transaction.timestamp).toLocaleDateString()}</p>
                     </div>
-                    <div className="space-y-1">
-                      <p className="text-slate-500 uppercase font-bold flex items-center gap-1">
-                        <RotateCcw className="w-3 h-3" /> Attempts
+                    <div className="space-y-2 p-3 bg-slate-900/40 rounded-lg border border-slate-800/50">
+                      <p className="text-slate-400 uppercase font-bold text-[9px] flex items-center gap-1.5 tracking-wide">
+                        <RotateCcw className="w-3.5 h-3.5 text-indigo-400" /> Attempts
                       </p>
-                      <p className="text-slate-300">{transaction.attemptCount} of 3</p>
+                      <p className="text-slate-200 font-semibold text-sm">{transaction.attemptCount} of 3</p>
+                    </div>
+                    <div className="col-span-2 space-y-2 p-3 bg-slate-900/40 rounded-lg border border-slate-800/50">
+                      <p className="text-slate-400 uppercase font-bold text-[9px] flex items-center gap-1.5 tracking-wide">
+                        <ExternalLink className="w-3.5 h-3.5 text-indigo-400" /> Transaction ID
+                      </p>
+                      <p className="text-slate-300 font-mono text-xs break-all">{transaction.id}</p>
                     </div>
                     {transaction.failureReason && (
-                      <div className="col-span-2 space-y-1 mt-2 p-2 bg-red-500/5 border border-red-500/10 rounded-lg">
-                        <p className="text-red-400 uppercase font-bold">Failure Reason</p>
-                        <p className="text-red-300/80 italic">{transaction.failureReason}</p>
+                      <div className="col-span-2 space-y-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                        <p className="text-red-400 uppercase font-bold text-[9px] tracking-wide">Failure Reason</p>
+                        <p className="text-red-300/90 text-sm">{transaction.failureReason}</p>
                       </div>
                     )}
                   </div>
@@ -127,24 +134,5 @@ const TransactionHistory: React.FC = () => {
     </div>
   );
 };
-
-// Simple RotateCcw icon replacement if needed
-const RotateCcw = ({ className }: { className?: string }) => (
-  <svg 
-    xmlns="http://www.w3.org/2000/svg" 
-    width="24" 
-    height="24" 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    stroke="currentColor" 
-    strokeWidth="2" 
-    strokeLinecap="round" 
-    strokeLinejoin="round" 
-    className={className}
-  >
-    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-    <path d="M3 3v5h5" />
-  </svg>
-);
 
 export default TransactionHistory;
