@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import PaymentForm from '@/components/PaymentForm';
 import CardPreview from '@/components/CardPreview';
 import StatusScreen from '@/components/StatusScreen';
+import TransactionHistory from '@/components/TransactionHistory';
 import { usePaymentStore } from '@/store/usePaymentStore';
 import { CardType } from '@/types/payment';
 
@@ -51,24 +52,32 @@ export default function Home() {
       </div>
 
       <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
-        {/* Left: Form / Status */}
-        <div className="flex justify-center lg:justify-end order-2 lg:order-1 min-h-[500px]">
-          {(status === 'IDLE' || status === 'PROCESSING') ? (
-            <PaymentForm onFormUpdate={handleFormUpdate} />
-          ) : (
-            <StatusScreen
-              status={status}
-              transaction={currentTransaction}
-              onRetry={handleRetry}
-              onReset={handleReset}
-              attemptCount={attemptCount}
-            />
-          )}
+        {/* Left Column: Form / Status & History */}
+        <div className="flex flex-col space-y-12 items-center lg:items-end order-2 lg:order-1">
+          {/* Form or Status Screen */}
+          <div className="w-full flex justify-center lg:justify-end min-h-[500px]">
+            {(status === 'IDLE' || status === 'PROCESSING') ? (
+              <PaymentForm onFormUpdate={handleFormUpdate} />
+            ) : (
+              <StatusScreen
+                status={status}
+                transaction={currentTransaction}
+                onRetry={handleRetry}
+                onReset={handleReset}
+                attemptCount={attemptCount}
+              />
+            )}
+          </div>
+
+          {/* History Section (Visible on mobile/tablet below the form) */}
+          <div className="lg:hidden w-full flex justify-center">
+            <TransactionHistory />
+          </div>
         </div>
 
-        {/* Right: Preview & Stats */}
-        <div className="flex flex-col items-center lg:items-start space-y-8 order-1 lg:order-2">
-          <div className="sticky top-12 space-y-8 w-full">
+        {/* Right Column: Preview, Stats & History (Desktop) */}
+        <div className="flex flex-col items-center lg:items-start space-y-12 order-1 lg:order-2">
+          <div className="sticky top-12 space-y-10 w-full">
             <div className="flex flex-col items-center lg:items-start">
               <h3 className="text-sm font-bold uppercase tracking-widest text-slate-500 mb-6">Live Card Preview</h3>
               <CardPreview {...previewData} />
@@ -92,15 +101,27 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Desktop History Section */}
+            <div className="hidden lg:block w-full">
+              <TransactionHistory />
+            </div>
+
             {/* Quick Tips */}
             <div className="max-w-sm bg-indigo-500/5 p-4 rounded-xl border border-indigo-500/20">
               <p className="text-xs text-indigo-300 leading-relaxed">
-                <span className="font-bold">Tip:</span> The gateway has a 15% chance of timing out. We'll automatically abort the request after 6 seconds.
+                <span className="font-bold">Tip:</span> All transactions are persisted in your browser's local storage. Feel free to refresh the page!
               </p>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Footer */}
+      <footer className="mt-20 py-8 border-t border-slate-900 w-full max-w-6xl text-center">
+        <p className="text-slate-600 text-[10px] tracking-widest uppercase">
+          Neo Pay - A Payment Gateway @ vignesh.m1683@gmail.com
+        </p>
+      </footer>
     </main>
   );
 }
